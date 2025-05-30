@@ -106,7 +106,6 @@ public class Main {
     }
 
     private static Optional<String> findDeployments(Pod pod, KubernetesClient client) {
-        // Step 1: Find ReplicaSet owning the Pod
         Optional<OwnerReference> replicaSetOwnerRef = pod.getMetadata().getOwnerReferences().stream()
                 .filter(owner -> "ReplicaSet".equals(owner.getKind()))
                 .findFirst();
@@ -127,7 +126,6 @@ public class Main {
             return Optional.empty();
         }
 
-        // Step 2: Find Deployment owning the ReplicaSet
         Optional<OwnerReference> deploymentOwnerRef = replicaSet.getMetadata().getOwnerReferences().stream()
                 .filter(owner -> "Deployment".equals(owner.getKind()))
                 .findFirst();
