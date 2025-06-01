@@ -51,11 +51,12 @@ public final class RemoteDebug extends KubeAwareCommand {
                 .toList();
 
         if (pods.isEmpty()) {
-            Printer.print("No matching pods using the regex \"%s\"", regex);
+            Printer.print("No matching pods using the regex \"%s\" within \"%s\" namespace",
+                    regex, client.getNamespace());
             return;
         }
 
-        Printer.print("Pods found:");
+        Printer.print("Pods found within \"%s\" namespace:", client.getNamespace());
         Set<String> deploymentNames = pods.stream()
                 .peek(pod -> Printer.print(pod.getMetadata().getName()))
                 .map(pod -> identifyPodDeployment(pod, client))
@@ -63,11 +64,11 @@ public final class RemoteDebug extends KubeAwareCommand {
                 .collect(toSet());
 
         if (deploymentNames.isEmpty()) {
-            Printer.print("No corresponding deployments identified");
+            Printer.print("\nNo corresponding deployments identified");
             return;
         }
 
-        Printer.print("Identified corresponding deployments:");
+        Printer.print("\nIdentified corresponding deployments:");
         List<Deployment> deployments = deploymentNames.stream()
                 .map(name -> client.apps()
                         .deployments()
@@ -82,11 +83,11 @@ public final class RemoteDebug extends KubeAwareCommand {
                 .toList();
 
         if (modifiedDeployments.isEmpty()) {
-            Printer.print("No deployments needed modifications");
+            Printer.print("\nNo deployments needed modifications");
             return;
         }
 
-        Printer.print("Saving modified deployments (remote debug %s):", (remove ? "disabled" : "enabled"));
+        Printer.print("\nSaving modified deployments (remote debug %s):", (remove ? "disabled" : "enabled"));
         modifiedDeployments.stream()
                 .peek(deployment -> Printer.print(deployment.getMetadata().getName()))
                 .forEach(deployment -> client.apps()

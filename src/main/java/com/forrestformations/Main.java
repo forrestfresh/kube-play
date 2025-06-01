@@ -2,6 +2,7 @@ package com.forrestformations;
 
 import com.forrestformations.commands.Namespace;
 import com.forrestformations.commands.PodWatch;
+import com.forrestformations.commands.PortForward;
 import com.forrestformations.commands.RemoteDebug;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -10,7 +11,8 @@ import picocli.CommandLine.Command;
         subcommands = {
                 RemoteDebug.class,
                 Namespace.class,
-                PodWatch.class
+                PodWatch.class,
+                PortForward.class
         })
 public class Main implements Runnable {
 
