@@ -1,14 +1,16 @@
 package com.forrestformations;
 
-import com.forrestformations.commands.RemoteDebug;
 import com.forrestformations.commands.Namespace;
+import com.forrestformations.commands.PodWatch;
+import com.forrestformations.commands.RemoteDebug;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 @Command(name = "kube-play", mixinStandardHelpOptions = true, version = "1.9", description = "Kubernetes helper CLI",
         subcommands = {
                 RemoteDebug.class,
-                Namespace.class
+                Namespace.class,
+                PodWatch.class
         })
 public class Main implements Runnable {
 

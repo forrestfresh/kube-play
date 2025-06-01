@@ -5,7 +5,7 @@ import io.fabric8.kubernetes.client.ConfigBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 
-public abstract class KubeAwareRunnable implements Runnable {
+public abstract class KubeAwareCommand implements Runnable {
 
     @Override
     public final void run() {

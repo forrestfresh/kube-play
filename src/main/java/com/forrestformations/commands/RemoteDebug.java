@@ -8,7 +8,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.forrestformations.KubeAwareRunnable;
+import com.forrestformations.KubeAwareCommand;
 import com.forrestformations.Printer;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerPort;
@@ -24,7 +24,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 @Command(name = "remote-debug", description = "Enables/disables java remote debug session for the matching pods")
-public final class RemoteDebug extends KubeAwareRunnable {
+public final class RemoteDebug extends KubeAwareCommand {
 
     private static final String DEBUG_STATEMENT = "-agentlib:jdwp=transport=dt_socket," +
             "server=y,suspend=n,address=0.0.0.0:8000";
