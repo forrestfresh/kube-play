@@ -19,7 +19,7 @@ public class Main implements Runnable {
 
     @Override
     public void run() {
-        System.out.println("Run with a subcommand. Use '--help' for options.");
+        Printer.print("Run with a subcommand. Use '--help' for options.");
     }
 
 }

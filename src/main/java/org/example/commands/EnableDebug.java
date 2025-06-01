@@ -5,7 +5,8 @@ import static java.util.stream.Collectors.toSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerPort;
@@ -17,8 +18,7 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.ReplicaSet;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.example.KubeAwareRunnable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.example.Printer;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -26,16 +26,18 @@ import picocli.CommandLine.Parameters;
 @Command(name = "enable-debug", description = "Enables java debug for the selected pods")
 public final class EnableDebug extends KubeAwareRunnable {
 
-    private static final Logger logger = LoggerFactory.getLogger(Namespace.class);
+    private static final String DEBUG_STATEMENT = "-agentlib:jdwp=transport=dt_socket," +
+            "server=y,suspend=n,address=0.0.0.0:8000";
+    private static final Pattern DEBUG_PATTERN = Pattern.compile("-agentlib:jdwp=[^\\s]*");
+    private static final String REDUNDANT_WHITESPACE = "\\s{2,}";
 
     private static final Set<String> DEBUG_VARS = Set.of("CATALINA_OPTS");
-    private static final String DEBUG_STATEMENT = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=0.0.0.0:8000";
 
     @Parameters(index = "0", description = "pod-name.*")
     private String regex = ".*";
 
-    @Option(names = {"-s", "--suspend"}, description = "Whether debug should suspend the application")
-    private boolean suspend = false;
+    @Option(names = {"-r", "--remove"}, description = "Remove debug configuration")
+    private boolean remove = false;
 
     @Override
     public void go(KubernetesClient client) {
@@ -43,75 +45,55 @@ public final class EnableDebug extends KubeAwareRunnable {
                 .list()
                 .getItems()
                 .stream()
-                .filter(pod -> pod.getMetadata().getName().matches(regex))
+                .filter(pod -> pod.getMetadata()
+                        .getName()
+                        .matches(regex))
                 .toList();
 
-        logger.info("Pods found:");
+        if (pods.isEmpty()) {
+            return;
+        }
+
+        Printer.print("Pods found:");
         Set<String> deploymentNames = pods.stream()
-                .peek(pod -> logger.info(pod.getMetadata().getName()))
-                .map(pod -> findDeployments(pod, client))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
+                .peek(pod -> Printer.print(pod.getMetadata().getName()))
+                .map(pod -> identifyPodDeployment(pod, client))
+                .flatMap(Optional::stream)
                 .collect(toSet());
 
-        logger.info("Corresponding deployments:");
+        if (deploymentNames.isEmpty()) {
+            return;
+        }
+
+        Printer.print("Identified corresponding deployments:");
         List<Deployment> deployments = deploymentNames.stream()
                 .map(name -> client.apps()
                         .deployments()
                         .withName(name)
                         .get())
-                .peek(deployment -> logger.info(deployment.getMetadata().getName()))
+                .peek(deployment -> Printer.print(deployment.getMetadata().getName()))
                 .toList();
 
-        deployments.forEach(deployment -> edit(deployment, client));
-    }
+        List<Deployment> modifiedDeployments = deployments.stream()
+                .map(deployment -> modifyDebug(deployment, client))
+                .flatMap(Optional::stream)
+                .toList();
 
-    private void edit(Deployment deployment, KubernetesClient client) {
-        List<Container> containers = deployment.getSpec().getTemplate().getSpec().getContainers();
-
-        AtomicBoolean updated = new AtomicBoolean(false);
-        containers.forEach(container -> updated.compareAndSet(false, editContainer(container)));
-
-        if (!updated.get()) {
+        if (modifiedDeployments.isEmpty()) {
+            Printer.print("No deployments needed modifications");
             return;
         }
 
-        logger.info("Saving deployment {}", deployment.getMetadata().getName());
-        client.apps().deployments()
-                .withName(deployment.getMetadata().getName())
-                .edit(d -> deployment);
+        Printer.print("Saving modified deployments:");
+        modifiedDeployments.stream()
+                .peek(deployment -> Printer.print(deployment.getMetadata().getName()))
+                .forEach(deployment -> client.apps()
+                        .deployments()
+                        .withName(deployment.getMetadata().getName())
+                        .edit(d -> deployment));
     }
 
-    private boolean editContainer(Container container) {
-        List<EnvVar> envVars = container.getEnv();
-
-        if (envVars == null) {
-            return false;
-        }
-
-        Optional<EnvVar> catalinaEnvVar = envVars.stream()
-                .filter(envVar -> DEBUG_VARS.contains(envVar.getName()))
-                .filter(envVar -> !envVar.getValue().contains(DEBUG_STATEMENT))
-                .findFirst();
-
-        catalinaEnvVar.ifPresent(envVar -> envVar.setValue(envVar.getValue() + " " + DEBUG_STATEMENT));
-
-        boolean hasDebugPort = container.getPorts().stream()
-                .anyMatch(port -> port.getContainerPort() == 8000);
-
-        if (!hasDebugPort) {
-            ContainerPort containerPort = new ContainerPortBuilder()
-                    .withName("debug")
-                    .withProtocol("TCP")
-                    .withContainerPort(8000)
-                    .build();
-            container.getPorts().add(containerPort);
-        }
-
-        return catalinaEnvVar.isPresent() || !hasDebugPort;
-    }
-
-    private Optional<String> findDeployments(Pod pod, KubernetesClient client) {
+    private Optional<String> identifyPodDeployment(Pod pod, KubernetesClient client) {
         Optional<OwnerReference> replicaSetOwnerRef = pod.getMetadata().getOwnerReferences().stream()
                 .filter(owner -> "ReplicaSet".equals(owner.getKind()))
                 .findFirst();
@@ -133,6 +115,83 @@ public final class EnableDebug extends KubeAwareRunnable {
                 .filter(owner -> "Deployment".equals(owner.getKind()))
                 .map(OwnerReference::getName)
                 .findFirst();
+    }
+
+    private Optional<Deployment> modifyDebug(Deployment deployment, KubernetesClient client) {
+        List<Container> containers = deployment.getSpec()
+                .getTemplate()
+                .getSpec()
+                .getContainers();
+
+        boolean updated = containers.stream()
+                .map(this::checkAndModifyContainer)
+                .reduce(false, (a, b) -> a || b);
+
+        return updated ? Optional.of(deployment) : Optional.empty();
+    }
+
+    private boolean checkAndModifyContainer(Container container) {
+        List<EnvVar> envVars = container.getEnv();
+
+        if (envVars == null) {
+            return false;
+        }
+
+        Optional<EnvVar> catalinaEnvVar = envVars.stream()
+                .filter(envVar -> DEBUG_VARS.contains(envVar.getName()))
+                .findFirst();
+
+        if (catalinaEnvVar.isEmpty()) {
+            return false;
+        }
+
+        boolean envVarModified = catalinaEnvVar.map(this::modifyEnvVar)
+                .orElse(false);
+        boolean portModified = modifyPorts(container.getPorts());
+
+        return envVarModified || portModified;
+    }
+
+    private boolean modifyEnvVar(EnvVar envVar) {
+        String variableValue = envVar.getValue();
+        Matcher matcher = DEBUG_PATTERN.matcher(variableValue);
+
+        if (remove && matcher.find()) {
+            String updatedValue = matcher.replaceAll("")
+                    .replaceAll(REDUNDANT_WHITESPACE, " ")
+                    .trim();
+            envVar.setValue(updatedValue);
+            return true;
+        }
+
+        if (!remove && !matcher.find()) {
+            envVar.setValue((variableValue + " " + DEBUG_STATEMENT).trim());
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean modifyPorts(List<ContainerPort> ports) {
+        Optional<ContainerPort> debugPort = ports.stream()
+                .filter(port -> port.getContainerPort() == 8000)
+                .findFirst();
+
+        if (remove && debugPort.isPresent()) {
+            ports.remove(debugPort.get());
+            return true;
+        }
+
+        if (!remove && debugPort.isEmpty()) {
+            ports.add(new ContainerPortBuilder()
+                    .withName("debug")
+                    .withProtocol("TCP")
+                    .withContainerPort(8000)
+                    .build());
+            return true;
+        }
+
+        return false;
     }
 
 }

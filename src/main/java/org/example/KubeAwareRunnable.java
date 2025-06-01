@@ -13,9 +13,9 @@ public abstract class KubeAwareRunnable implements Runnable {
         try (KubernetesClient client = new KubernetesClientBuilder().withConfig(config).build()) {
             go(client);
         } catch (RuntimeException runtime) {
-            System.err.println("Error: " + runtime.getMessage());
+            Printer.error("Error: %s", runtime.getMessage());
         } catch (CommandException cE) {
-            System.err.println("Command error: " + cE.getMessage());
+            Printer.error("Command error: %s", cE.getMessage());
         }
     }
 
