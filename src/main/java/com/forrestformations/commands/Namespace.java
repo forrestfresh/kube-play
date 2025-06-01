@@ -1,8 +1,8 @@
-package org.example.commands;
+package com.forrestformations.commands;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
-import org.example.KubeAwareRunnable;
-import org.example.Printer;
+import com.forrestformations.KubeAwareRunnable;
+import com.forrestformations.Printer;
 import picocli.CommandLine.Command;
 
 @Command(name = "namespace", description = "Print namespace")

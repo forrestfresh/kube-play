@@ -1,4 +1,4 @@
-package org.example.help;
+package com.forrestformations.help;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 

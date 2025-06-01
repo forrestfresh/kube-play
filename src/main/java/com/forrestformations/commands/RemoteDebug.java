@@ -1,4 +1,4 @@
-package org.example.commands;
+package com.forrestformations.commands;
 
 import static java.util.stream.Collectors.toSet;
 
@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.forrestformations.KubeAwareRunnable;
+import com.forrestformations.Printer;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerPort;
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
@@ -17,14 +19,12 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.ReplicaSet;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import org.example.KubeAwareRunnable;
-import org.example.Printer;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "enable-debug", description = "Enables java debug for the selected pods")
-public final class EnableDebug extends KubeAwareRunnable {
+@Command(name = "remote-debug", description = "Enables/disables java remote debug session for the matching pods")
+public final class RemoteDebug extends KubeAwareRunnable {
 
     private static final String DEBUG_STATEMENT = "-agentlib:jdwp=transport=dt_socket," +
             "server=y,suspend=n,address=0.0.0.0:8000";
@@ -51,6 +51,7 @@ public final class EnableDebug extends KubeAwareRunnable {
                 .toList();
 
         if (pods.isEmpty()) {
+            Printer.print("No matching pods using the regex \"%s\"", regex);
             return;
         }
 
@@ -62,6 +63,7 @@ public final class EnableDebug extends KubeAwareRunnable {
                 .collect(toSet());
 
         if (deploymentNames.isEmpty()) {
+            Printer.print("No corresponding deployments identified");
             return;
         }
 
@@ -84,7 +86,7 @@ public final class EnableDebug extends KubeAwareRunnable {
             return;
         }
 
-        Printer.print("Saving modified deployments:");
+        Printer.print("Saving modified deployments (remote debug %s):", (remove ? "disabled" : "enabled"));
         modifiedDeployments.stream()
                 .peek(deployment -> Printer.print(deployment.getMetadata().getName()))
                 .forEach(deployment -> client.apps()

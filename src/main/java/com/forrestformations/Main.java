@@ -1,13 +1,13 @@
-package org.example;
+package com.forrestformations;
 
-import org.example.commands.EnableDebug;
-import org.example.commands.Namespace;
+import com.forrestformations.commands.RemoteDebug;
+import com.forrestformations.commands.Namespace;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 @Command(name = "kube-play", mixinStandardHelpOptions = true, version = "1.9", description = "Kubernetes helper CLI",
         subcommands = {
-                EnableDebug.class,
+                RemoteDebug.class,
                 Namespace.class
         })
 public class Main implements Runnable {

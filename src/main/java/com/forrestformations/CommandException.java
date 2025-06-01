@@ -1,4 +1,4 @@
-package org.example;
+package com.forrestformations;
 
 public class CommandException extends Exception {
 
