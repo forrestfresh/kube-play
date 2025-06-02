@@ -2,6 +2,8 @@ package com.forrestformations.commands;
 
 import static java.util.stream.Collectors.toList;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -49,11 +51,9 @@ public final class PortForward extends KubeAwareCommand {
         try {
             Printer.print("Enabling port forward for:");
 
-            List<LocalPortForward> portForwards = IntStream.range(0, pods.size())
+            IntStream.range(0, pods.size())
                     .mapToObj(idx -> portForward(pods.get(idx), port + idx, client))
                     .collect(toList());
-
-            portForwards.forEach(f -> System.out.println(f.getLocalAddress()));
 
             Printer.print("Port forwarding started. Press Ctrl+C to stop.");
             Thread.currentThread().join();
