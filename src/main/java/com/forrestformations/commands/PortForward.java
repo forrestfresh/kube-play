@@ -1,17 +1,15 @@
 package com.forrestformations.commands;
 
 import static java.util.stream.Collectors.toList;
-
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.List;
-import java.util.stream.IntStream;
-
 import com.forrestformations.KubeAwareCommand;
+import com.forrestformations.KubeCtlException;
 import com.forrestformations.Printer;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.LocalPortForward;
+import java.io.IOException;
+import java.util.List;
+import java.util.stream.IntStream;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -44,16 +42,15 @@ public final class PortForward extends KubeAwareCommand {
             return;
         }
 
-        portForward(pods, client);
+        portForward(pods);
     }
 
-    private void portForward(List<Pod> pods, KubernetesClient client) {
+    private void portForward(List<Pod> pods) {
         try {
             Printer.print("Enabling port forward for:");
 
             IntStream.range(0, pods.size())
-                    .mapToObj(idx -> portForward(pods.get(idx), port + idx, client))
-                    .collect(toList());
+                    .forEach(idx -> portForwardWithKubeCtl(pods.get(idx), port + idx));
 
             Printer.print("Port forwarding started. Press Ctrl+C to stop.");
             Thread.currentThread().join();
@@ -62,11 +59,41 @@ public final class PortForward extends KubeAwareCommand {
         }
     }
 
-    private LocalPortForward portForward(Pod pod, int localPort, KubernetesClient client) {
+    private void portForwardWithKubeCtl(Pod pod, int localPort) {
         Printer.print("%d:%d - %s", remotePort, localPort, pod.getMetadata().getName());
-        return client.pods()
-                .withName(pod.getMetadata().getName())
-                .portForward(remotePort, localPort);
+        try {
+            String ns = pod.getMetadata().getNamespace();
+            Printer.print("Forwarding pod in namespace %s", ns);
+            Process process = startKubectlPortForward(pod, localPort, remotePort);
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                if (process.isAlive()) {
+                    process.destroy();
+                }
+            }));
+        } catch (Exception e) {
+            throw new KubeCtlException(String.format("Failed to port forward pod %s", pod.getMetadata().getName()), e);
+        }
+    }
+
+    private Process startKubectlPortForward(Pod pod, int localPort, int remotePort) {
+        String namespace = pod.getMetadata().getNamespace();
+        String podName = pod.getMetadata().getName();
+
+        List<String> command = List.of(
+                "kubectl", "port-forward",
+                "pod/" + podName,
+                localPort + ":" + remotePort,
+                "-n", namespace
+        );
+
+        try {
+            Printer.print("Starting kubectl port-forward: %s", String.join(" ", command));
+            ProcessBuilder builder = new ProcessBuilder(command);
+            builder.inheritIO(); // optional: pipe to stdout/stderr
+            return builder.start(); // returns immediately
+        } catch (IOException e) {
+            throw new KubeCtlException(String.format("Failed to port forward pod %s", pod.getMetadata().getName()), e);
+        }
     }
 
 }
